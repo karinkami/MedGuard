@@ -29,7 +29,7 @@ MedGuard AI - это комплексная система для ранней �
 ### 1. Клонируйте репозиторий
 ```bash
 git clone https://github.com/karinkami/MedGuard.git
-cd Heart_and_diabetes_pro
+cd MedGuard
 ```
 ### 2. Создайте и активируйте виртуальное окружение
 ```bash
@@ -38,7 +38,7 @@ venv\Scripts\activate
 ```
 ### 3. Установите зависимости
 ```bash
-pip install -r requirements.txt
+pip install -r reguirements.txt
 ```
 ### 4. Скачайте датасеты
 https://www.kaggle.com/datasets/sulianova/cardiovascular-disease-dataset/data - для сердца
