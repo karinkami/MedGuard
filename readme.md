@@ -23,3 +23,32 @@ MedGuard AI - это комплексная система для ранней �
 - **Визуализация** результатов с помощью Plotly
 - **Медицинская интерпретация** факторов риска
 - **Интерфейс** на Streamlit
+
+## Запуск проекта
+
+### 1. Клонируйте репозиторий
+```bash
+git clone https://github.com/karinkami/MedGuard.git
+cd Heart_and_diabetes_pro
+```
+### 2. Создайте и активируйте виртуальное окружение
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+### 3. Установите зависимости
+```bash
+pip install -r requirements.txt
+```
+### 4. Скачайте датасеты
+https://www.kaggle.com/datasets/sulianova/cardiovascular-disease-dataset/data - для сердца
+https://www.kaggle.com/datasets/iammustafatz/diabetes-prediction-dataset - для диабета
+
+### 5. Создание файлов
+Создайте папку data. В ней создайте файлы diabetes_dataset.csv - для диабета и heart_dataset.csv - для сердца
+
+### 3. Обучите модели
+```bash
+python train_diabetes.py
+python train_heart.py
+```
