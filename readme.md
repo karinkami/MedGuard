@@ -47,8 +47,12 @@ https://www.kaggle.com/datasets/iammustafatz/diabetes-prediction-dataset - дл�
 ### 5. Создание файлов
 Создайте папку data. В ней создайте файлы diabetes_dataset.csv - для диабета и heart_dataset.csv - для сердца
 
-### 3. Обучите модели
+### 6. Обучите модели
 ```bash
 python train_diabetes.py
 python train_heart.py
+```
+### 7. Запустите проект
+```bash
+python app.py
 ```
