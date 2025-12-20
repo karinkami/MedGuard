@@ -54,5 +54,5 @@ python train_heart.py
 ```
 ### 7. Запустите проект
 ```bash
-python app.py
+streamlit run app.py
 ```
