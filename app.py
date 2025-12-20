@@ -11,8 +11,12 @@ from utils.helpers import (load_ensemble_model, smart_predict,
                            get_diabetes_feature_descriptions, get_diabetes_medical_thresholds,
                            analyze_diabetes_factors, prepare_diabetes_input,
                            get_gender_options, get_smoking_history_options)
+try:
+    from spark_analyzer import SparkDataAnalyzer, prepare_spark_ui
+    SPARK_AVAILABLE = True
+except ImportError:
+    SPARK_AVAILABLE = False
 
-# Настройка страницы
 st.set_page_config(
     page_title="MedGuard AI - Умная диагностика заболеваний",
     page_icon="🏥",
@@ -20,7 +24,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Кастомные стили CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -213,31 +216,45 @@ st.markdown("""
 
 
 def main():
-    # Заголовок приложения
     st.markdown('<h1 class="main-header">🏥 MedGuard AI</h1>', unsafe_allow_html=True)
     st.markdown(
         '<p class="sub-header">Умная система диагностики сердечно-сосудистых заболеваний и диабета на основе ансамбля ML моделей</p>',
         unsafe_allow_html=True)
 
-    # Загрузка моделей
     heart_ensemble, heart_scaler, heart_metadata, heart_individual_models = load_ensemble_model()
     diabetes_ensemble, diabetes_scaler, diabetes_metadata, diabetes_individual_models = load_diabetes_ensemble()
 
     # Навигация в сайдбаре
     with st.sidebar:
         st.markdown("## 🧭 Навигация")
-        page = st.radio("Навигация", ["🏠 Главная", "❤️ Диагностика сердца", "🍭 Диагностика диабета", "📊 Анализ & ML",
-                                      "ℹ️ О проекте"])
+        if SPARK_AVAILABLE:
+            navigation_options = [
+                "🏠 Главная",
+                "❤️ Диагностика сердца",
+                "🍭 Диагностика диабета",
+                "📊 ML",
+                "⚡ Spark Анализ",
+                "ℹ️ О проекте"
+            ]
+        else:
+            navigation_options = [
+                "🏠 Главная",
+                "❤️ Диагностика сердца",
+                "🍭 Диагностика диабета",
+                "📊 ML",
+                "ℹ️ О проекте"
+            ]
+
+        page = st.radio("Навигация", navigation_options)
+        # page = st.radio("Навигация", ["🏠 Главная", "❤️ Диагностика сердца", "🍭 Диагностика диабета", "📊 Анализ & ML","ℹ️ О проекте"])
 
 
         try:
-            # Статистика сердца
             heart_df = pd.read_csv('data/heart_dataset.csv', sep=';')
             heart_total = len(heart_df)
             heart_healthy = len(heart_df[heart_df['cardio'] == 0])
             heart_sick = len(heart_df[heart_df['cardio'] == 1])
 
-            # Статистика диабета
             diabetes_df = pd.read_csv('data/diabetes_dataset.csv')
             diabetes_total = len(diabetes_df)
             diabetes_healthy = len(diabetes_df[diabetes_df['diabetes'] == 0])
@@ -258,14 +275,527 @@ def main():
             show_model_error("диабета")
         else:
             show_diabetes_diagnosis(diabetes_ensemble, diabetes_scaler, diabetes_individual_models, diabetes_metadata)
-    elif page == "📊 Анализ & ML":
+    elif page == "📊 ML":
         show_analysis_and_ml(heart_metadata, heart_individual_models, diabetes_metadata, diabetes_individual_models)
+    elif page == "⚡ Spark Анализ":
+        show_spark_analysis_page()
     elif page == "ℹ️ О проекте":
         show_about()
 
 
+def show_spark_analysis_page():
+
+    st.header("⚡ Анализ больших данных с apache spark")
+
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white; padding: 1.5rem; border-radius: 15px; margin: 1rem 0;">
+        <h3 style="color: white; margin: 0;">🚀 Распределенная обработка медицинских данных</h3>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if not SPARK_AVAILABLE:
+        st.error("""
+        ## ❌ Apache Spark не установлен
+
+        Для использования Spark анализа установите:
+        ```bash
+        pip install pyspark==3.5.0
+        ```
+
+        Преимущества Spark:
+        - Обработка миллионов записей за секунды
+        - Распределенные вычисления на кластерах
+        - SQL-like синтаксис для анализа
+        - Интеграция с ML библиотеками
+        """)
+        return
+
+    if 'spark_analyzer' not in st.session_state:
+        with st.spinner("🚀 Запуск Apache Spark..."):
+            try:
+                st.session_state.spark_analyzer = SparkDataAnalyzer()
+                st.success("✅ Spark готов к работе!")
+            except Exception as e:
+                st.error(f"❌ Ошибка запуска Spark: {e}")
+                return
+
+    spark_analyzer = st.session_state.spark_analyzer
+
+    st.subheader("🔍 Выберите тип анализа")
+
+    analysis_type = st.selectbox(
+        "Тип анализа",
+        [
+            "📊 Общая статистика",
+            "🎯 Факторы риска",
+            "👥 Возрастные группы",
+            "📈 Графики"
+        ]
+    )
+
+    if st.button("▶️ Запустить анализ", type="primary", use_container_width=True):
+        with st.spinner("🔄 Выполняю распределенный анализ..."):
+            try:
+                if analysis_type == "📊 Общая статистика":
+                    show_spark_basic_stats(spark_analyzer)
+
+                elif analysis_type == "🎯 Факторы риска":
+                    show_spark_risk_factors(spark_analyzer)
+
+                elif analysis_type == "👥 Возрастные группы":
+                    show_spark_age_groups(spark_analyzer)
+
+                elif analysis_type == "📈 Графики":
+                    show_spark_visualizations_tab()
+
+            except Exception as e:
+                st.error(f"❌ Ошибка анализа: {e}")
+
+
+    if st.button("🛑 Остановить Spark", type="secondary"):
+        spark_analyzer.stop()
+        del st.session_state.spark_analyzer
+        st.success("Spark сессия остановлена")
+        st.rerun()
+
+
+def show_spark_statistics_tab():
+    st.subheader("📊 Статистика данных")
+
+    try:
+        heart_df = pd.read_csv('data/heart_dataset.csv', sep=';')
+        diabetes_df = pd.read_csv('data/diabetes_dataset.csv')
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("### ❤️ Статистика сердца")
+
+            st.metric("Всего пациентов", f"{len(heart_df):,}")
+            st.metric("С заболеванием", f"{len(heart_df[heart_df['cardio'] == 1]):,}")
+            st.metric("Здоровы", f"{len(heart_df[heart_df['cardio'] == 0]):,}")
+
+            prevalence = len(heart_df[heart_df['cardio'] == 1]) / len(heart_df) * 100
+            st.metric("Распространенность", f"{prevalence:.1f}%")
+
+            heart_df['age_years'] = heart_df['age'] / 365
+            st.metric("Средний возраст", f"{heart_df['age_years'].mean():.1f} лет")
+            st.metric("Среднее давление", f"{heart_df['ap_hi'].mean():.0f}/{heart_df['ap_lo'].mean():.0f}")
+
+        with col2:
+            st.markdown("### 🩸 Статистика диабета")
+
+            st.metric("Всего пациентов", f"{len(diabetes_df):,}")
+            st.metric("С диабетом", f"{len(diabetes_df[diabetes_df['diabetes'] == 1]):,}")
+            st.metric("Здоровы", f"{len(diabetes_df[diabetes_df['diabetes'] == 0]):,}")
+
+            prevalence = len(diabetes_df[diabetes_df['diabetes'] == 1]) / len(diabetes_df) * 100
+            st.metric("Распространенность", f"{prevalence:.1f}%")
+
+            # Дополнительная статистика
+            st.metric("Средний возраст", f"{diabetes_df['age'].mean():.1f} лет")
+            st.metric("Средний BMI", f"{diabetes_df['bmi'].mean():.1f}")
+            st.metric("Средний HbA1c", f"{diabetes_df['HbA1c_level'].mean():.1f}%")
+
+    except Exception as e:
+        st.error(f"❌ Ошибка загрузки данных: {e}")
+
+
+def show_spark_visualizations_tab():
+    try:
+        heart_df = pd.read_csv('data/heart_dataset.csv', sep=';')
+        diabetes_df = pd.read_csv('data/diabetes_dataset.csv')
+
+
+        viz_tabs = st.tabs(["❤️ Сердце", "🩸 Диабет"])
+
+        with viz_tabs[0]:
+            st.markdown("### ❤️ Визуализации данных сердца")
+
+            # Преобразуем возраст в годы для визуализации
+            heart_df['age_years'] = heart_df['age'] / 365
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                # Гистограмма возраста
+                fig = px.histogram(heart_df, x='age_years', color='cardio',
+                                   title="Распределение возраста по заболеваниям сердца",
+                                   color_discrete_map={0: '#1dd1a1', 1: '#ff6b6b'},
+                                   nbins=30)
+                fig.update_layout(height=400)
+                st.plotly_chart(fig, use_container_width=True)
+
+            with col2:
+                # Box plot давления
+                fig = px.box(heart_df, x='cardio', y='ap_hi',
+                             title="Систолическое давление по группам",
+                             color='cardio',
+                             color_discrete_map={0: '#1dd1a1', 1: '#ff6b6b'})
+                fig.update_layout(height=400)
+                st.plotly_chart(fig, use_container_width=True)
+
+            # Дополнительные графики
+            col1, col2 = st.columns(2)
+
+            with col1:
+                # Scatter plot давления
+                fig = px.scatter(heart_df.sample(1000) if len(heart_df) > 1000 else heart_df,
+                                 x='ap_hi', y='ap_lo',
+                                 color='cardio',
+                                 title="Систолическое vs Диастолическое давление",
+                                 color_discrete_map={0: '#1dd1a1', 1: '#ff6b6b'})
+                fig.update_layout(height=400)
+                st.plotly_chart(fig, use_container_width=True)
+
+            with col2:
+                # Распределение по полу
+                gender_heart = heart_df.groupby(['gender', 'cardio']).size().reset_index(name='count')
+                gender_heart['gender'] = gender_heart['gender'].map({1: 'Женщины', 2: 'Мужчины'})
+                fig = px.bar(gender_heart, x='gender', y='count', color='cardio',
+                             title="Распределение заболеваний по полу",
+                             color_discrete_map={0: '#1dd1a1', 1: '#ff6b6b'})
+                fig.update_layout(height=400)
+                st.plotly_chart(fig, use_container_width=True)
+
+        with viz_tabs[1]:
+            st.markdown("### 🩸 Визуализации данных диабета")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                # Гистограмма возраста
+                fig = px.histogram(diabetes_df, x='age', color='diabetes',
+                                   title="Распределение возраста по наличию диабета",
+                                   color_discrete_map={0: '#1dd1a1', 1: '#ff6b6b'},
+                                   nbins=30)
+                fig.update_layout(height=400)
+                st.plotly_chart(fig, use_container_width=True)
+
+            with col2:
+                # Box plot BMI
+                fig = px.box(diabetes_df, x='diabetes', y='bmi',
+                             title="Индекс массы тела по группам",
+                             color='diabetes',
+                             color_discrete_map={0: '#1dd1a1', 1: '#ff6b6b'})
+                fig.update_layout(height=400)
+                st.plotly_chart(fig, use_container_width=True)
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                fig = px.scatter(diabetes_df.sample(1000) if len(diabetes_df) > 1000 else diabetes_df,
+                                 x='blood_glucose_level', y='HbA1c_level',
+                                 color='diabetes',
+                                 title="Глюкоза vs HbA1c",
+                                 color_discrete_map={0: '#1dd1a1', 1: '#ff6b6b'})
+                fig.update_layout(height=400)
+                st.plotly_chart(fig, use_container_width=True)
+
+            with col2:
+                gender_diabetes = diabetes_df.groupby(['gender', 'diabetes']).size().reset_index(name='count')
+                fig = px.bar(gender_diabetes, x='gender', y='count', color='diabetes',
+                             title="Распределение диабета по полу",
+                             color_discrete_map={0: '#1dd1a1', 1: '#ff6b6b'})
+                fig.update_layout(height=400)
+                st.plotly_chart(fig, use_container_width=True)
+
+    except Exception as e:
+        st.error(f"❌ Ошибка создания графиков: {e}")
+
+def show_spark_complete_analysis(spark_analyzer):
+    st.subheader("🚀 Полный анализ данных с визуализацией")
+
+    if st.button("▶️ Запустить полный анализ", type="primary", use_container_width=True):
+        with st.spinner("🔄 Выполняю полный анализ с визуализацией..."):
+            try:
+                heart_df = spark_analyzer.load_heart_data()
+                diabetes_df = spark_analyzer.load_diabetes_data()
+
+                if not heart_df or not diabetes_df:
+                    st.error("❌ Не удалось загрузить данные")
+                    return
+
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+
+                status_text.text("📊 Анализ базовой статистики...")
+                show_spark_basic_stats(spark_analyzer)
+                progress_bar.progress(25)
+
+                status_text.text("🎯 Анализ факторов риска...")
+                show_spark_risk_factors(spark_analyzer)
+                progress_bar.progress(50)
+
+                status_text.text("📈 Анализ возрастных групп...")
+                show_spark_age_groups(spark_analyzer)
+                progress_bar.progress(75)
+
+                status_text.text("📊 Создание графиков...")
+                show_spark_visualizations_tab()
+                progress_bar.progress(100)
+
+                status_text.text("✅ Анализ завершен!")
+
+                st.success("### 🎉 Полный анализ данных успешно выполнен!")
+
+                st.markdown("""
+                ### 📋 Что было проанализировано:
+                1. **Базовая статистика** - общие показатели по датасетам
+                2. **Факторы риска** - ключевые факторы для каждого заболевания
+                3. **Возрастные группы** - распределение по возрастам
+                4. **Визуализация** - графики и диаграммы для наглядности
+
+                ### ⚡ Преимущества Spark анализа:
+                - **Скорость**: Обработка 100,000+ записей за секунды
+                - **Масштабируемость**: Работа с большими объемами данных
+                - **Гибкость**: SQL-like синтаксис для сложных запросов
+                - **Интеграция**: Совместимость с ML библиотеками
+                """)
+
+            except Exception as e:
+                st.error(f"❌ Ошибка при выполнении анализа: {e}")
+
+
+def show_spark_basic_stats(spark_analyzer):
+    st.subheader("📊 Общая статистика")
+
+    try:
+        heart_df = pd.read_csv('data/heart_dataset.csv', sep=';')
+        diabetes_df = pd.read_csv('data/diabetes_dataset.csv')
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("### ❤️ Статистика сердца")
+
+            st.metric("Всего пациентов", f"{len(heart_df):,}")
+            st.metric("С заболеванием", f"{len(heart_df[heart_df['cardio'] == 1]):,}")
+            st.metric("Здоровы", f"{len(heart_df[heart_df['cardio'] == 0]):,}")
+
+            prevalence = len(heart_df[heart_df['cardio'] == 1]) / len(heart_df) * 100
+            st.metric("Распространенность", f"{prevalence:.1f}%")
+
+            # Возрастная статистика
+            heart_df['age_years'] = heart_df['age'] / 365
+            st.metric("Средний возраст", f"{heart_df['age_years'].mean():.1f} лет")
+            st.metric("Среднее давление", f"{heart_df['ap_hi'].mean():.0f}/{heart_df['ap_lo'].mean():.0f}")
+
+        with col2:
+            st.markdown("### 🩸 Статистика диабета")
+
+            st.metric("Всего пациентов", f"{len(diabetes_df):,}")
+            st.metric("С диабетом", f"{len(diabetes_df[diabetes_df['diabetes'] == 1]):,}")
+            st.metric("Здоровы", f"{len(diabetes_df[diabetes_df['diabetes'] == 0]):,}")
+
+            prevalence = len(diabetes_df[diabetes_df['diabetes'] == 1]) / len(diabetes_df) * 100
+            st.metric("Распространенность", f"{prevalence:.1f}%")
+
+            # Дополнительная статистика
+            st.metric("Средний возраст", f"{diabetes_df['age'].mean():.1f} лет")
+            st.metric("Средний ИМТ", f"{diabetes_df['bmi'].mean():.1f}")
+            st.metric("Средний гликированный гемоглобин (HbA1c)", f"{diabetes_df['HbA1c_level'].mean():.1f}%")
+
+    except Exception as e:
+        st.error(f"❌ Ошибка загрузки данных: {e}")
+
+
+def show_spark_risk_factors(spark_analyzer):
+    st.subheader("🎯 Анализ факторов риска")
+
+    heart_df = spark_analyzer.load_heart_data()
+
+    if heart_df:
+        st.markdown("### ❤️ Факторы риска сердечных заболеваний")
+        risk_factors = spark_analyzer.analyze_risk_factors(heart_df, 'cardio')
+
+        if risk_factors:
+            for factor in risk_factors[:4]:
+                col1, col2 = st.columns([2, 1])
+
+                with col1:
+                    factor_name = factor.get('factor_name_ru', factor['factor'])
+                    st.markdown(f"**{factor_name}**")
+                    st.caption(f"Заболеваемость при наличии фактора: {factor['disease_with_factor']:.1f}%")
+                    st.caption(f"Заболеваемость без фактора: {factor['disease_without_factor']:.1f}%")
+
+                with col2:
+                    st.metric(
+                        "Относительный риск",
+                        f"{factor['relative_risk']:.2f}",
+                        delta=f"+{factor['disease_with_factor'] - factor['disease_without_factor']:.1f}%"
+                    )
+
+                st.progress(min(factor['relative_risk'] / 5, 1.0))
+                st.divider()
+
+    diabetes_df = spark_analyzer.load_diabetes_data()
+
+    if diabetes_df:
+        st.markdown("### 🩸 Факторы риска диабета")
+        risk_factors = spark_analyzer.analyze_risk_factors(diabetes_df, 'diabetes')
+
+        if risk_factors:
+            for factor in risk_factors[:4]:
+                col1, col2 = st.columns([2, 1])
+
+                with col1:
+                    factor_name = factor.get('factor_name_ru', factor['factor'])
+                    st.markdown(f"**{factor_name}**")
+                    st.caption(f"Заболеваемость при наличии фактора: {factor['disease_with_factor']:.1f}%")
+                    st.caption(f"Заболеваемость без фактора: {factor['disease_without_factor']:.1f}%")
+
+                with col2:
+                    st.metric(
+                        "Относительный риск",
+                        f"{factor['relative_risk']:.2f}",
+                        delta=f"+{factor['disease_with_factor'] - factor['disease_without_factor']:.1f}%"
+                    )
+
+                st.progress(min(factor['relative_risk'] / 5, 1.0))
+                st.divider()
+
+
+def show_spark_age_groups(spark_analyzer):
+    st.subheader("📈 Распределение по возрастным группам")
+
+    tabs = st.tabs(["❤️ Сердце", "🩸 Диабет"])
+
+    with tabs[0]:
+        heart_df = spark_analyzer.load_heart_data()
+
+        if heart_df:
+            age_groups = spark_analyzer.analyze_age_groups(heart_df, 'cardio')
+
+            total_patients = sum(group['total'] for group in age_groups)
+            st.caption(f"📊 Всего проанализировано пациентов: {total_patients:,}")
+
+            for group in age_groups:
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    st.metric("Возрастная группа", group['age_group'])
+
+                with col2:
+                    st.metric("Всего пациентов", f"{group['total']:,}")
+
+                with col3:
+                    st.metric(
+                        "Заболеваемость",
+                        f"{group['disease_rate']:.1f}%",
+                        f"{group['disease_count']:,} пациентов"
+                    )
+
+                st.divider()
+
+    with tabs[1]:
+        diabetes_df = spark_analyzer.load_diabetes_data()
+
+        if diabetes_df:
+            age_groups = spark_analyzer.analyze_diabetes_age_groups(diabetes_df)
+
+            if not age_groups:
+                st.error("⚠️ Не удалось проанализировать возрастные группы для диабета")
+            else:
+                total_patients = sum(group['total'] for group in age_groups)
+                st.caption(f"📊 Всего проанализировано пациентов: {total_patients:,}")
+
+                for group in age_groups:
+                    col1, col2, col3 = st.columns(3)
+
+                    with col1:
+                        st.metric("Возрастная группа", group['age_group'])
+
+                    with col2:
+                        st.metric("Всего пациентов", f"{group['total']:,}")
+
+                    with col3:
+                        st.metric(
+                            "Диабет",
+                            f"{group['disease_rate']:.1f}%",
+                            f"{group['disease_count']:,} пациентов"
+                        )
+
+                    st.divider()
+
+
+def show_spark_full_analysis(spark_analyzer):
+    st.subheader("🚀 Полный анализ данных")
+
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
+    status_text.text("🔄 Загрузка данных...")
+    heart_df = spark_analyzer.load_heart_data()
+    diabetes_df = spark_analyzer.load_diabetes_data()
+    progress_bar.progress(25)
+
+    status_text.text("📊 Анализ статистики...")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if heart_df:
+            heart_stats = spark_analyzer.get_basic_stats(heart_df, "Сердце")
+            st.metric("Сердце: пациентов", f"{heart_stats.get('total_patients', 0):,}")
+
+    with col2:
+        if diabetes_df:
+            diabetes_stats = spark_analyzer.get_basic_stats(diabetes_df, "Диабет")
+            st.metric("Диабет: пациентов", f"{diabetes_stats.get('total_patients', 0):,}")
+
+    progress_bar.progress(50)
+
+    status_text.text("🎯 Анализ факторов риска...")
+
+    if heart_df:
+        heart_risks = spark_analyzer.analyze_risk_factors(heart_df, 'cardio')
+        if heart_risks:
+            st.markdown(
+                f"**Топ фактор риска для сердца:** {heart_risks[0]['factor']} (риск: {heart_risks[0]['relative_risk']:.2f})")
+
+    if diabetes_df:
+        diabetes_risks = spark_analyzer.analyze_risk_factors(diabetes_df, 'diabetes')
+        if diabetes_risks:
+            st.markdown(
+                f"**Топ фактор риска для диабета:** {diabetes_risks[0]['factor']} (риск: {diabetes_risks[0]['relative_risk']:.2f})")
+
+    progress_bar.progress(75)
+
+    status_text.text("🧹 Проверка качества данных...")
+
+    if heart_df:
+        heart_issues = spark_analyzer.detect_data_quality_issues(heart_df)
+        heart_issue_count = len(heart_issues['missing_values']) + len(heart_issues['outliers'])
+        st.markdown(f"**Проблемы с данными сердца:** {heart_issue_count}")
+
+    if diabetes_df:
+        diabetes_issues = spark_analyzer.detect_data_quality_issues(diabetes_df)
+        diabetes_issue_count = len(diabetes_issues['missing_values']) + len(diabetes_issues['outliers'])
+        st.markdown(f"**Проблемы с данными диабета:** {diabetes_issue_count}")
+
+    progress_bar.progress(100)
+    status_text.text("✅ Анализ завершен!")
+
+    st.success("### 🎉 Полный анализ данных успешно выполнен!")
+
+    st.markdown("""
+    ### 📋 Что было проанализировано:
+    1. **Загрузка данных** - Spark DataFrame с оптимизацией
+    2. **Базовая статистика** - распределение заболеваний
+    3. **Факторы риска** - относительные риски для ключевых показателей
+    4. **Качество данных** - пропуски и аномалии
+
+    ### ⚡ Преимущества Spark:
+    - Обработка 100,000+ записей за секунды
+    - Распределенные вычисления
+    - SQL-like синтаксис для сложных запросов
+    - Масштабируемость до кластеров
+    """)
+
+
 def show_model_error(model_type):
-    """Показать ошибку загрузки модели"""
     st.error(f"""
     ## ❌ Модели {model_type} не найдены!
 
@@ -287,7 +817,6 @@ def show_homepage():
     </div>
     """, unsafe_allow_html=True)
 
-    # Карточки функций - ВЫРОВНЕННЫЕ
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -320,7 +849,6 @@ def show_homepage():
         </div>
         """, unsafe_allow_html=True)
 
-    # Как это работает
     st.markdown("## 🎯 Как это работает")
 
     steps_col1, steps_col2, steps_col3, steps_col4 = st.columns(4)
@@ -361,7 +889,6 @@ def show_homepage():
         </div>
         """, unsafe_allow_html=True)
 
-    # Дополнительная информация
     st.markdown("---")
 
     info_col1, info_col2 = st.columns(2)
@@ -396,7 +923,6 @@ def show_heart_diagnosis(ensemble, scaler, individual_models, metadata):
     st.header("❤️ Умная диагностика сердечных заболеваний")
     st.markdown("Введите данные пациента для анализа риска сердечно-сосудистых заболеваний")
 
-    # Форма ввода данных для нового датасета
     with st.container():
         st.subheader("👤 Демографическая информация")
         col1, col2, col3 = st.columns(3)
@@ -440,7 +966,6 @@ def show_heart_diagnosis(ensemble, scaler, individual_models, metadata):
             active = st.radio("**Физическая активность**", [0, 1], format_func=lambda x: "✅ Да" if x == 1 else "❌ Нет",
                               help="Регулярная физическая активность")
 
-    # Кнопка анализа
     if st.button("🔍 Проанализировать риск сердечных заболеваний", type="primary", use_container_width=True):
         with st.spinner("🔄 Анализируем данные с помощью ансамбля моделей..."):
             # Преобразование данных для нового датасета
@@ -450,7 +975,6 @@ def show_heart_diagnosis(ensemble, scaler, individual_models, metadata):
                 smoke=smoke, alco=alco, active=active
             )
 
-            # Умное предсказание
             prediction_result = smart_predict(patient_data, ensemble, individual_models, scaler)
 
             if prediction_result is not None:
@@ -496,7 +1020,6 @@ def show_diabetes_diagnosis(ensemble, scaler, individual_models, metadata):
             blood_glucose_level = st.slider("**Уровень глюкозы в крови** (мг/дл)", 50, 300, 100,
                                             help="Текущий уровень сахара в крови")
 
-    # Кнопка анализа
     if st.button("🔍 Проанализировать риск диабета", type="primary", use_container_width=True):
         with st.spinner("🔄 Анализируем данные с помощью алгоритмов искусственного интеллекта..."):
             # Подготовка данных
@@ -511,7 +1034,6 @@ def show_diabetes_diagnosis(ensemble, scaler, individual_models, metadata):
                 blood_glucose=blood_glucose_level
             )
 
-            # Умное предсказание
             prediction_result = smart_predict_diabetes(patient_data, ensemble, scaler, individual_models)
 
             if prediction_result is not None:
@@ -519,7 +1041,6 @@ def show_diabetes_diagnosis(ensemble, scaler, individual_models, metadata):
 
 
 def display_heart_results(prediction_result, patient_data, metadata):
-    """Отображение результатов диагностики сердца"""
     st.markdown("---")
     st.header("🎯 Результаты умной диагностики сердца")
 
@@ -529,7 +1050,6 @@ def display_heart_results(prediction_result, patient_data, metadata):
 
     risk_level, risk_text, color = get_risk_level(risk_prob, confidence)
 
-    # Карточка риска
     st.markdown(f"""
     <div class="risk-card {risk_level}">
         <h2 style="font-size: 2rem; margin-bottom: 0.5rem;">{risk_text}</h2>
@@ -538,11 +1058,9 @@ def display_heart_results(prediction_result, patient_data, metadata):
     </div>
     """, unsafe_allow_html=True)
 
-    # Визуализация
     col1, col2 = st.columns(2)
 
     with col1:
-        # Gauge chart риска
         fig = go.Figure(go.Indicator(
             mode="gauge+number+delta",
             value=risk_prob * 100,
@@ -568,7 +1086,6 @@ def display_heart_results(prediction_result, patient_data, metadata):
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        # Согласие моделей
         models = list(individual_probas.keys())
         probas = [individual_probas[model] * 100 for model in models]
 
@@ -590,7 +1107,6 @@ def display_heart_results(prediction_result, patient_data, metadata):
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # Анализ факторов риска
     st.subheader("🔍 Анализ факторов риска")
     factors = analyze_heart_factors(patient_data, metadata)
 
@@ -615,7 +1131,6 @@ def display_heart_results(prediction_result, patient_data, metadata):
         </div>
         """, unsafe_allow_html=True)
 
-    # Детали согласия моделей
     st.subheader("🤖 Согласие моделей")
 
     confidence_class = "confidence-high" if confidence > 0.8 else "confidence-medium" if confidence > 0.6 else "confidence-low"
@@ -628,7 +1143,6 @@ def display_heart_results(prediction_result, patient_data, metadata):
     </div>
     """, unsafe_allow_html=True)
 
-    # Рекомендации
     st.subheader("💡 Умные рекомендации")
     recommendations = get_recommendations(risk_level, confidence, individual_probas)
 
@@ -641,7 +1155,6 @@ def display_heart_results(prediction_result, patient_data, metadata):
 
 
 def display_diabetes_results(prediction_result, patient_data, metadata, ensemble, individual_models):
-    """Отображение результатов диагностики диабета для нового датасета"""
     st.markdown("---")
     st.header("🎯 Результаты умной диагностики диабета")
 
@@ -651,7 +1164,6 @@ def display_diabetes_results(prediction_result, patient_data, metadata, ensemble
 
     risk_level, risk_text, color = get_diabetes_risk_level(risk_prob, confidence)
 
-    # Карточка риска
     st.markdown(f"""
     <div class="risk-card {risk_level}">
         <h2 style="font-size: 2rem; margin-bottom: 0.5rem;">{risk_text}</h2>
@@ -660,11 +1172,9 @@ def display_diabetes_results(prediction_result, patient_data, metadata, ensemble
     </div>
     """, unsafe_allow_html=True)
 
-    # Визуализация
     col1, col2 = st.columns(2)
 
     with col1:
-        # Gauge chart риска диабета
         fig = go.Figure(go.Indicator(
             mode="gauge+number+delta",
             value=risk_prob * 100,
@@ -690,7 +1200,6 @@ def display_diabetes_results(prediction_result, patient_data, metadata, ensemble
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        # Согласие моделей диабета
         models = list(individual_probas.keys())
         probas = [individual_probas[model] * 100 for model in models]
 
@@ -712,7 +1221,6 @@ def display_diabetes_results(prediction_result, patient_data, metadata, ensemble
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # Анализ факторов риска
     st.subheader("🔍 Анализ факторов риска")
     factors = analyze_diabetes_factors(patient_data, metadata)
 
@@ -737,7 +1245,6 @@ def display_diabetes_results(prediction_result, patient_data, metadata, ensemble
         </div>
         """, unsafe_allow_html=True)
 
-    # Детали согласия моделей
     st.subheader("🤖 Согласие моделей")
 
     confidence_class = "confidence-high" if confidence > 0.8 else "confidence-medium" if confidence > 0.6 else "confidence-low"
@@ -750,7 +1257,6 @@ def display_diabetes_results(prediction_result, patient_data, metadata, ensemble
     </div>
     """, unsafe_allow_html=True)
 
-    # Рекомендации по диабету
     st.subheader("💡 Рекомендации по профилактике диабета")
     recommendations = get_diabetes_recommendations(risk_level, confidence, individual_probas)
 
@@ -763,14 +1269,9 @@ def display_diabetes_results(prediction_result, patient_data, metadata, ensemble
 
 
 def show_analysis_and_ml(heart_metadata, heart_individual_models, diabetes_metadata, diabetes_individual_models):
-    """Объединенная страница анализа данных и ML моделей"""
-    st.header("📊 Анализ данных & ML Модели")
+    st.header("📊 ML Модели")
 
-    # Создаем табы для разделения контента
-    tab1, tab2, tab3 = st.tabs(["📈 Анализ данных", "❤️ Модели сердца", "🍭 Модели диабета"])
-
-    with tab1:
-        show_data_analysis()
+    tab2, tab3 = st.tabs(["❤️ Модели сердца", "🍭 Модели диабета"])
 
     with tab2:
         show_heart_ml_models_info(heart_metadata, heart_individual_models)
@@ -779,123 +1280,12 @@ def show_analysis_and_ml(heart_metadata, heart_individual_models, diabetes_metad
         show_diabetes_ml_models_info(diabetes_metadata, diabetes_individual_models)
 
 
-def show_data_analysis():
-    """Компонент анализа данных"""
-    st.subheader("📈 Анализ медицинских данных")
-
-    try:
-        # Создаем табы для разных наборов данных
-        heart_tab, diabetes_tab = st.tabs(["❤️ Данные сердца", "🍭 Данные диабета"])
-
-        with heart_tab:
-            st.subheader("Данные сердечных заболеваний")
-            df_heart = pd.read_csv('data/heart_dataset.csv', sep=';')
-
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Всего пациентов", len(df_heart))
-            with col2:
-                st.metric("С заболеванием", len(df_heart[df_heart['cardio'] == 1]))
-            with col3:
-                st.metric("Здоровы", len(df_heart[df_heart['cardio'] == 0]))
-            with col4:
-                prevalence = len(df_heart[df_heart['cardio'] == 1]) / len(df_heart) * 100
-                st.metric("Распространенность", f"{prevalence:.1f}%")
-
-            # Визуализации для сердца
-            col1, col2 = st.columns(2)
-            with col1:
-                # Преобразуем возраст в годы для визуализации
-                df_heart['age_years'] = df_heart['age'] / 365
-                fig = px.histogram(df_heart, x='age_years', color='cardio',
-                                   title="Распределение возраста по заболеваниям сердца",
-                                   color_discrete_map={0: '#1dd1a1', 1: '#ff6b6b'})
-                st.plotly_chart(fig, use_container_width=True)
-
-            with col2:
-                fig = px.box(df_heart, x='cardio', y='ap_hi',
-                             title="Систолическое давление по группам",
-                             color='cardio',
-                             color_discrete_map={0: '#1dd1a1', 1: '#ff6b6b'})
-                st.plotly_chart(fig, use_container_width=True)
-
-            # Дополнительные визуализации
-            col1, col2 = st.columns(2)
-            with col1:
-                fig = px.scatter(df_heart, x='ap_hi', y='ap_lo',
-                                 color='cardio', title="Систолическое vs Диастолическое давление",
-                                 color_discrete_map={0: '#1dd1a1', 1: '#ff6b6b'})
-                st.plotly_chart(fig, use_container_width=True)
-
-            with col2:
-                # Распределение по полу и заболеваниям
-                gender_heart = df_heart.groupby(['gender', 'cardio']).size().reset_index(name='count')
-                gender_heart['gender'] = gender_heart['gender'].map({1: 'Женщины', 2: 'Мужчины'})
-                fig = px.bar(gender_heart, x='gender', y='count', color='cardio',
-                             title="Распределение заболеваний по полу",
-                             color_discrete_map={0: '#1dd1a1', 1: '#ff6b6b'})
-                st.plotly_chart(fig, use_container_width=True)
-
-        with diabetes_tab:
-            st.subheader("Данные диабета")
-            df_diabetes = pd.read_csv('data/diabetes_dataset.csv')
-
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Всего пациентов", len(df_diabetes))
-            with col2:
-                st.metric("С диабетом", len(df_diabetes[df_diabetes['diabetes'] == 1]))
-            with col3:
-                st.metric("Здоровы", len(df_diabetes[df_diabetes['diabetes'] == 0]))
-            with col4:
-                prevalence = len(df_diabetes[df_diabetes['diabetes'] == 1]) / len(df_diabetes) * 100
-                st.metric("Распространенность", f"{prevalence:.1f}%")
-
-            # Визуализации для нового датасета диабета
-            col1, col2 = st.columns(2)
-            with col1:
-                fig = px.histogram(df_diabetes, x='age', color='diabetes',
-                                   title="Распределение возраста по наличию диабета",
-                                   color_discrete_map={0: '#1dd1a1', 1: '#ff6b6b'})
-                st.plotly_chart(fig, use_container_width=True)
-
-            with col2:
-                fig = px.box(df_diabetes, x='diabetes', y='bmi',
-                             title="Индекс массы тела по группам",
-                             color='diabetes',
-                             color_discrete_map={0: '#1dd1a1', 1: '#ff6b6b'})
-                st.plotly_chart(fig, use_container_width=True)
-
-            # Дополнительные визуализации для нового датасета
-            col1, col2 = st.columns(2)
-            with col1:
-                fig = px.scatter(df_diabetes, x='blood_glucose_level', y='HbA1c_level',
-                                 color='diabetes', title="Глюкоза vs HbA1c",
-                                 color_discrete_map={0: '#1dd1a1', 1: '#ff6b6b'})
-                st.plotly_chart(fig, use_container_width=True)
-
-            with col2:
-                # Распределение по полу и диабету
-                gender_diabetes = df_diabetes.groupby(['gender', 'diabetes']).size().reset_index(name='count')
-                fig = px.bar(gender_diabetes, x='gender', y='count', color='diabetes',
-                             title="Распределение диабета по полу",
-                             color_discrete_map={0: '#1dd1a1', 1: '#ff6b6b'})
-                st.plotly_chart(fig, use_container_width=True)
-
-    except Exception as e:
-        st.error(f"❌ Ошибка загрузки данных: {e}")
-        st.info("Убедитесь, что файлы данных находятся в папке 'data/'")
-
-
 def show_heart_ml_models_info(heart_metadata, heart_individual_models):
-    """Компонент информации о ML моделях сердца"""
     st.subheader("🤖 Машинное обучение для диагностики сердца")
 
-    # Производительность моделей
     performance = get_model_performance_info()
     ensemble_info = get_ensemble_info()
 
-    # Создаем 7 колонок для всех моделей + ансамбль
     col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
 
     with col1:
@@ -920,7 +1310,6 @@ def show_heart_ml_models_info(heart_metadata, heart_individual_models):
         cb_acc = float(performance.get('catboost', '0.735')) * 100
         st.metric("CatBoost", f"{cb_acc:.1f}%")
 
-    # Визуализация сравнения моделей
     models = ['Random Forest', 'Gradient Boosting', 'Extra Trees', 'XGBoost', 'LightGBM', 'CatBoost', 'Ансамбль']
     accuracy = [rf_acc, gb_acc, et_acc, xgb_acc, lgbm_acc,
                 float(performance.get('catboost', '0.735')) * 100, ensemble_acc]
@@ -939,7 +1328,6 @@ def show_heart_ml_models_info(heart_metadata, heart_individual_models):
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Информация об ансамбле
     st.subheader("🏗️ Архитектура ансамбля")
 
     col1, col2 = st.columns(2)
@@ -974,14 +1362,11 @@ def show_heart_ml_models_info(heart_metadata, heart_individual_models):
 
 
 def show_diabetes_ml_models_info(diabetes_metadata, diabetes_individual_models):
-    """Компонент информации о ML моделях диабета"""
     st.subheader("🤖 Машинное обучение для диагностики диабета")
 
-    # Производительность моделей
     performance = get_diabetes_performance_info()
     ensemble_info = get_diabetes_ensemble_info()
 
-    # Создаем 7 колонок для всех моделей + ансамбль
     col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
 
     with col1:
@@ -1006,7 +1391,6 @@ def show_diabetes_ml_models_info(diabetes_metadata, diabetes_individual_models):
         cb_acc = float(performance.get('catboost', '0.971')) * 100
         st.metric("CatBoost", f"{cb_acc:.1f}%")
 
-    # Визуализация сравнения моделей
     models = ['Random Forest', 'Gradient Boosting', 'Extra Trees', 'XGBoost', 'LightGBM', 'CatBoost', 'Ансамбль']
     accuracy = [rf_acc, gb_acc, et_acc, xgb_acc, lgbm_acc,
                 float(performance.get('catboost', '0.971')) * 100, ensemble_acc]
@@ -1025,7 +1409,6 @@ def show_diabetes_ml_models_info(diabetes_metadata, diabetes_individual_models):
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Информация об ансамбле
     st.subheader("🏗️ Архитектура ансамбля")
 
     col1, col2 = st.columns(2)
@@ -1060,7 +1443,6 @@ def show_diabetes_ml_models_info(diabetes_metadata, diabetes_individual_models):
 
 
 def show_about():
-    """Страница о проекте"""
     st.header("ℹ️ О проекте MedGuard AI")
 
     st.markdown("""
@@ -1077,40 +1459,48 @@ def show_about():
         ### 🎯 Наша миссия
         MedGuard AI — это инновационная система для ранней диагностики 
         сердечно-сосудистых заболеваний и диабета с использованием 
-        передовых методов машинного обучения.
+        передовых методов машинного обучения и распределенных вычислений.
 
         ### 🔬 Технологический стек
-        - **Машинное обучение**: Ансамбли моделей с высокой точностью
-        - **Data Science**: Анализ медицинских данных и feature engineering
-        - **Web технологии**: Streamlit для современного интерфейса
-        - **Визуализация**: Plotly для интерактивных графиков
+        - **🤖 Машинное обучение**: Ансамбли моделей с высокой точностью
+        - **📊 Data Science**: Анализ медицинских данных и feature engineering
+        - **⚡️ Большие данные**: Apache Spark для распределенной обработки данных
+        - **🌐 Web технологии**: Streamlit для современного интерфейса
+        - **📈 Визуализация**: Plotly для интерактивных графиков
+
 
         ### ❤️ Диагностика сердца
-        - Точность ансамбля: >73%
-        - Данные: Cardiovascular Disease Dataset (70,000+ пациентов)
-        - Признаки: возраст, пол, давление, холестерин, глюкоза, курение, алкоголь, активность
-        - 6 моделей в ансамбле
+        - **Точность ансамбля**: >73%
+        - **Данные**: Cardiovascular Disease Dataset (70,000+ пациентов)
+        - **Признаки**: возраст, пол, давление, холестерин, глюкоза, курение, алкоголь, активность
+        - **Ансамбль**: 6 моделей (Random Forest, Gradient Boosting, XGBoost, LightGBM, CatBoost, Extra Trees)
         """)
 
     with col2:
         st.markdown("""
         ### 🍭 Диагностика диабета  
-        - Точность ансамбля: >97%
-        - Данные: Diabetes Dataset (100,000+ пациентов)
-        - Признаки: возраст, пол, гипертония, заболевания сердца, курение, BMI, HbA1c, уровень глюкозы
-        - 6 моделей в ансамбле
-        - Детальный анализ факторов риска
+        - **Точность ансамбля**: >97%
+        - **Данные**: Diabetes Dataset (100,000+ пациентов)
+        - **Признаки**: возраст, пол, гипертония, заболевания сердца, курение, BMI, HbA1c, уровень глюкозы
+        - **Ансамбль**: 6 моделей (Random Forest, Gradient Boosting, XGBoost, LightGBM, CatBoost, Extra Trees)
+        - **Детальный анализ факторов риска**
+
+        ### 🏆 Преимущества нашего подхода
+        - **Комбинация ML и Big Data** — точные прогнозы на больших данных
+        - **Интерактивная аналитика** — мгновенные ответы на сложные запросы
+        - **Визуализация** — профессиональные графики и диаграммы
 
         ### 📊 Научная основа
         Система обучена на реальных медицинских данных, 
         содержащих информацию о пациентах с различными 
-        медицинскими показателями.
+        медицинскими показателями. 
 
         ### ⚠️ Медицинское предупреждение
-        Данная система предназначена для образовательных и 
-        вспомогательных целей и не заменяет консультацию 
-        квалифицированного медицинского специалиста.
+        **Важно**: Данная система предназначена для **образовательных 
+        и вспомогательных целей** и не заменяет консультацию 
+        квалифицированного медицинского специалиста. 
         """)
+
 
 
 if __name__ == "__main__":
