@@ -11,7 +11,6 @@
 [![CatBoost](https://img.shields.io/badge/CatBoost-1.2-yellow?logo=catboost&logoColor=white)](https://catboost.ai)
 [![Apache Spark](https://img.shields.io/badge/Apache%20Spark-3.4+-orange?logo=apachespark&logoColor=white)](https://spark.apache.org)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/karinkami/MedGuard?style=social)](https://github.com/karinkami/MedGuard/stargazers)
 
 ---
 
